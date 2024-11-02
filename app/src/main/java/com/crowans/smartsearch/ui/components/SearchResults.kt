@@ -9,6 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.crowans.smartsearch.ui.components.cards.AppCard
+import com.crowans.smartsearch.ui.components.cards.ContactCard
 import com.crowans.smartsearch.ui.state.SearchState
 
 @Composable
@@ -40,6 +42,19 @@ fun SearchResults(
                     items(searchState.contacts) { contact ->
                         ContactCard(
                             contact = contact,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+                }
+            }
+            searchState.apps.isNotEmpty() -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    items(searchState.apps) { app ->
+                        AppCard(
+                            app = app,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
                     }

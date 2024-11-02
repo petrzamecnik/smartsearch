@@ -1,17 +1,35 @@
 <resources>
+    <!-- App Name -->
     <string name="app_name">SmartSearch</string>
-    <string name="search_placeholder">Search …</string>
+
+    <!-- Search -->
+    <string name="search_placeholder">Search contacts and apps…</string>
     <string name="search_icon_description">Search Icon</string>
     <string name="settings_icon_description">Settings</string>
+
+    <!-- Section Headers -->
+    <string name="section_contacts">Contacts</string>
+    <string name="section_applications">Applications</string>
+
+    <!-- Contact Card -->
     <string name="text_divider">\u0020\u0020|\u0020\u0020</string>
     <string name="contact_card_call">Call</string>
     <string name="contact_card_message">Message</string>
-    <string name="cancel">Cancel</string>
-    <string name="open_settings">Open Settings</string>
 
+    <!-- App Card -->
+    <string name="app_icon_description">Application Icon</string>
+    <string name="launch_app">Launch %1$s</string>
 
     <!-- Permissions -->
     <string name="permission_required">Permission Required</string>
     <string name="call_permission_explanation">The call permission is required to make phone calls directly from the app. Please grant this permission in Settings.</string>
     <string name="permission_explanation">This permission is required for the requested functionality. Please grant it in Settings.</string>
+
+    <!-- Buttons -->
+    <string name="cancel">Cancel</string>
+    <string name="open_settings">Open Settings</string>
+
+    <!-- Error Messages -->
+    <string name="error_app_not_found">Application could not be launched</string>
+    <string name="error_search_failed">Search failed: %1$s</string>
 </resources>

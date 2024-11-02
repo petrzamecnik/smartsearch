@@ -1,4 +1,4 @@
-package com.crowans.smartsearch.ui.components
+package com.crowans.smartsearch.ui.components.cards
 
 import android.content.Intent
 import android.content.pm.PackageManager
