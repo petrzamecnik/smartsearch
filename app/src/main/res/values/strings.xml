@@ -6,4 +6,13 @@
     <string name="text_divider">\u0020\u0020|\u0020\u0020</string>
     <string name="contact_card_call">Call</string>
     <string name="contact_card_message">Message</string>
+    <string name="cancel">Cancel</string>
+    <string name="open_settings">Open Settings</string>
+
+
+
+    <!-- Permissions -->
+    <string name="permission_required">Permission Required</string>
+    <string name="call_permission_explanation">The call permission is required to make phone calls directly from the app. Please grant this permission in Settings.</string>
+    <string name="permission_explanation">This permission is required for the requested functionality. Please grant it in Settings.</string>
 </resources>
