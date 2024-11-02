@@ -9,17 +9,20 @@ import kotlinx.coroutines.withContext
 
 class ContactsRepository(private val context: Context) {
     suspend fun searchContacts(query: String): List<Contact> = withContext(Dispatchers.IO) {
-        val contacts = mutableListOf<Contact>()
+        val contactsMap = mutableMapOf<String, Contact>()
 
         val projection = arrayOf(
-            ContactsContract.CommonDataKinds.Phone._ID,
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.Phone.NUMBER,
-            ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI
+            ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI,
+            ContactsContract.CommonDataKinds.Phone.TYPE,
+            ContactsContract.CommonDataKinds.Phone.ACCOUNT_TYPE_AND_DATA_SET
         )
 
         val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
         val selectionArgs = arrayOf("%$query%")
+        val sortOrder = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC"
 
         var cursor: Cursor? = null
 
@@ -29,28 +32,53 @@ class ContactsRepository(private val context: Context) {
                 projection,
                 selection,
                 selectionArgs,
-                null
+                sortOrder
             )
 
             cursor?.let {
-                val idIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone._ID)
-                val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val contactIdIndex =
+                    it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+                val nameIndex =
+                    it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                 val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                val photoThumbnailUriIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI)
+                val photoThumbnailUriIndex =
+                    it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI)
+                val typeIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.TYPE)
+                val accountTypeIndex =
+                    it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.ACCOUNT_TYPE_AND_DATA_SET)
 
                 while (it.moveToNext()) {
-                    val id = it.getString(idIndex)
+                    val contactId = it.getString(contactIdIndex)
                     val name = it.getString(nameIndex)
-                    val number = it.getString(numberIndex)
+                    val number = it.getString(numberIndex)?.normalizePhoneNumber()
                     val photoThumbnail = it.getString(photoThumbnailUriIndex)
+                    val phoneType = it.getInt(typeIndex)
 
-                    contacts.add(Contact(id, name, number, photoThumbnail))
+                    // Only add if we haven't seen this contact before or if this is a preferred number
+                    if (!contactsMap.containsKey(contactId) || isPreferredPhoneType(phoneType)) {
+                        contactsMap[contactId] = Contact(contactId, name, number.toString(), photoThumbnail)
+                    }
                 }
             }
         } finally {
             cursor?.close()
         }
 
-        contacts
+        return@withContext contactsMap.values.toList()
+    }
+
+    private fun String.normalizePhoneNumber(): String {
+        // Remove all non-digit characters except '+'
+        return replace(Regex("[^0-9+]"), "")
+    }
+
+    private fun isPreferredPhoneType(type: Int): Boolean {
+        return when (type) {
+            ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE,
+            ContactsContract.CommonDataKinds.Phone.TYPE_MAIN,
+            ContactsContract.CommonDataKinds.Phone.TYPE_WORK_MOBILE -> true
+
+            else -> false
+        }
     }
 }
