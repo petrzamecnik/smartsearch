@@ -5,11 +5,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.crowans.smartsearch.ui.components.SearchOverlay
+import com.crowans.smartsearch.ui.components.SearchResults
 import com.crowans.smartsearch.ui.theme.SmartSearchTheme
+import com.crowans.smartsearch.ui.viewmodel.SearchViewModel
+
 
 @Composable
-fun SearchScreen() {
+fun SearchScreen(
+    viewModel: SearchViewModel = viewModel()
+) {
+    val searchState by viewModel.searchState.collectAsState()
+
     SmartSearchTheme {
         Box(
             modifier = Modifier
@@ -17,17 +25,25 @@ fun SearchScreen() {
                 .padding(16.dp),
             contentAlignment = Alignment.TopCenter
         ) {
-            SearchOverlay(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 32.dp),
-                onSettingsClick = {
-                    // implement settings screen and navige to it
-                }
-            )
+            Column {
+                SearchOverlay(
+                    searchQuery = searchState.query,
+                    onSearchQueryChange = viewModel::onSearchQueryChanged,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 32.dp),
+                    onSettingsClick = {
+                        // Implement settings navigation
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                SearchResults(
+                    searchState = searchState,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
-
-
-

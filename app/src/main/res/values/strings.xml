@@ -3,4 +3,7 @@
     <string name="search_placeholder">Search …</string>
     <string name="search_icon_description">Search Icon</string>
     <string name="settings_icon_description">Settings</string>
+    <string name="text_divider">\u0020\u0020|\u0020\u0020</string>
+    <string name="contact_card_call">Call</string>
+    <string name="contact_card_message">Message</string>
 </resources>

@@ -1,9 +1,11 @@
 package com.crowans.smartsearch
 
+import android.content.Intent
 import android.os.Bundle
-import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
 import com.crowans.smartsearch.ui.screens.SearchScreen
 import com.crowans.smartsearch.utils.PermissionUtils
 
@@ -11,26 +13,55 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Request overlay permission
-        PermissionUtils.checkOverlayPermission(this)
+        // Configure window to handle system bars
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Set window flags for overlay and transparency
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        )
-
-        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        // Request permissions when activity is created
+        PermissionUtils.checkPermissions(this)
 
         setContent {
             SearchScreen()
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        PermissionUtils.handleOverlayPermissionResult(this, requestCode)
+        PermissionUtils.handlePermissionResult(
+            activity = this,
+            requestCode = requestCode,
+            grantResults = intArrayOf(),
+            onOverlayGranted = {
+                // Handle overlay permission granted
+            },
+            onOverlayDenied = {
+                // Handle overlay permission denied
+                finish()
+            }
+        )
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        PermissionUtils.handlePermissionResult(
+            activity = this,
+            requestCode = requestCode,
+            grantResults = grantResults,
+            onContactsGranted = {
+                // Handle contacts permission granted
+            },
+            onContactsDenied = {
+                Toast.makeText(
+                    this,
+                    "Contacts permission is required for search functionality",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        )
     }
 }

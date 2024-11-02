@@ -23,10 +23,11 @@ import com.crowans.smartsearch.R
 
 @Composable
 fun SearchOverlay(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     onSettingsClick: () -> Unit = {}
 ) {
-    var searchQuery by remember { mutableStateOf("") }
     val shape = RoundedCornerShape(50.dp)
 
     Row(
@@ -50,7 +51,7 @@ fun SearchOverlay(
 
         BasicTextField(
             value = searchQuery,
-            onValueChange = { searchQuery = it },
+            onValueChange = onSearchQueryChange,
             textStyle = TextStyle(
                 color = Color.White,
                 fontSize = 16.sp
@@ -82,7 +83,7 @@ fun SearchOverlay(
             contentDescription = stringResource(R.string.settings_icon_description),
             tint = Color.White,
             modifier = Modifier
-                .size(28.dp)  // Slightly smaller than search icon
+                .size(28.dp)
                 .clickable { onSettingsClick() }
         )
     }
