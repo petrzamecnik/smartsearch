@@ -56,7 +56,8 @@ class ContactsRepository(private val context: Context) {
 
                     // Only add if we haven't seen this contact before or if this is a preferred number
                     if (!contactsMap.containsKey(contactId) || isPreferredPhoneType(phoneType)) {
-                        contactsMap[contactId] = Contact(contactId, name, number.toString(), photoThumbnail)
+                        contactsMap[contactId] =
+                            Contact(contactId, name, number.toString(), photoThumbnail)
                     }
                 }
             }
