@@ -3,28 +3,38 @@ package com.crowans.smartsearch.data.repository
 import android.content.Context
 import android.database.Cursor
 import android.provider.ContactsContract
+import androidx.collection.LruCache
 import com.crowans.smartsearch.data.model.Contact
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class ContactsRepository(private val context: Context) {
-    fun searchContacts(query: String): Flow<List<Contact>> = flow {
-        val normalizedQuery = query.trim().lowercase()
-        if (normalizedQuery.isEmpty()) {
-            emit(emptyList())
-            return@flow
+    // Cache for storing contacts
+    private val contactsCache = LruCache<String, List<Contact>>(100)
+    private val mutex = Mutex()
+    private var cachedContacts: List<Contact>? = null
+
+    init {
+        // Preload contacts in background
+        preloadContacts()
+    }
+
+    private fun preloadContacts() {
+        Thread {
+            loadAllContacts()
+        }.apply {
+            priority = Thread.MIN_PRIORITY
+            start()
         }
+    }
 
-        val contacts = queryContacts(normalizedQuery)
-        emit(contacts)
-    }.flowOn(Dispatchers.IO)
-
-    private suspend fun queryContacts(normalizedQuery: String): List<Contact> {
-        val contactsMap = mutableMapOf<String, ContactWithScore>()
-
+    private fun loadAllContacts(): List<Contact> {
+        val contacts = mutableListOf<Contact>()
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
@@ -33,100 +43,82 @@ class ContactsRepository(private val context: Context) {
             ContactsContract.CommonDataKinds.Phone.TYPE
         )
 
-        val selection = """
-            LOWER(${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME}) LIKE ?
-        """.trimIndent()
+        context.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            projection,
+            null,
+            null,
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+        )?.use { cursor ->
+            val contactMap = mutableMapOf<String, Contact>()
 
-        // Use a single broad selection and filter in memory
-        val selectionArgs = arrayOf("%$normalizedQuery%")
-
-        var cursor: Cursor? = null
-
-        try {
-            cursor = context.contentResolver.query(
-                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                null // No SQL sorting - we'll sort in memory
-            )
-
-            cursor?.let {
-                val contactIdIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
-                val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                val photoThumbnailUriIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI)
-                val typeIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.TYPE)
-
-                while (it.moveToNext()) {
-                    val contactId = it.getString(contactIdIndex)
-                    val name = it.getString(nameIndex) ?: continue
-                    val number = it.getString(numberIndex)?.normalizePhoneNumber() ?: continue
-                    val photoThumbnail = it.getString(photoThumbnailUriIndex)
-                    val phoneType = it.getInt(typeIndex)
-
-                    val matchScore = calculateMatchScore(name, normalizedQuery)
-                    if (matchScore > 0) {
-                        val contact = Contact(contactId, name, number, photoThumbnail)
-                        val existing = contactsMap[contactId]
-
-                        if (existing == null ||
-                            (isPreferredPhoneType(phoneType) && !isPreferredPhoneType(existing.type)) ||
-                            matchScore > existing.score) {
-                            contactsMap[contactId] = ContactWithScore(contact, matchScore, phoneType)
-                        }
-                    }
+            while (cursor.moveToNext()) {
+                val contact = cursor.toContact()
+                // Keep only the first number for each contact to avoid duplicates
+                if (!contactMap.containsKey(contact.id)) {
+                    contactMap[contact.id] = contact
                 }
             }
-        } finally {
-            cursor?.close()
+            contacts.addAll(contactMap.values)
         }
 
-        return contactsMap.values
-            .sortedWith(
-                compareByDescending<ContactWithScore> { it.score }
-                    .thenBy { it.contact.name.lowercase() }
-            )
-            .map { it.contact }
+        return contacts
     }
 
-    private data class ContactWithScore(
-        val contact: Contact,
-        val score: Int,
-        val type: Int
-    )
-
-    private fun calculateMatchScore(name: String, query: String): Int {
-        val normalizedName = name.lowercase()
-        val words = normalizedName.split(Regex("\\s+"))
-
-        // Exact prefix matches for "Tom"
-        if (words.any { it.lowercase().startsWith(query) }) {
-            val firstWordMatch = words.first().lowercase().startsWith(query)
-            return if (firstWordMatch) 1000 else 800
+    fun searchContacts(query: String): Flow<List<Contact>> = flow {
+        if (query.length < 2) {
+            emit(emptyList())
+            return@flow
         }
 
-        // Partial matches within words (lower priority)
-        if (query.length >= 2 && words.any {
-                it.length > query.length &&
-                        it.lowercase().contains(query)
-            }) {
-            return 100
+        val normalizedQuery = query.trim().lowercase()
+        val results = mutex.withLock {
+            // Try to get from cache first
+            contactsCache.get(normalizedQuery) ?: run {
+                // If not in cache, search in memory
+                val contacts = cachedContacts ?: loadAllContacts().also {
+                    cachedContacts = it
+                }
+
+                contacts.filter { contact ->
+                    when {
+                        // Exact matches get highest priority
+                        contact.name.lowercase().startsWith(normalizedQuery) -> true
+                        // Then check if any word starts with query
+                        contact.name.split(" ").any {
+                            it.lowercase().startsWith(normalizedQuery)
+                        } -> true
+                        // Finally check if phone number contains query
+                        normalizedQuery.all { it.isDigit() } &&
+                                contact.phoneNumber.contains(normalizedQuery) -> true
+                        else -> false
+                    }
+                }.sortedBy { it.name }
+                    .take(15) // Limit results for better performance
+                    .also {
+                        // Cache the results
+                        contactsCache.put(normalizedQuery, it)
+                    }
+            }
         }
 
-        return 0
+        emit(results)
+    }.flowOn(Dispatchers.IO)
+
+    private fun Cursor.toContact(): Contact {
+        val idIndex = getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+        val nameIndex = getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+        val numberIndex = getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+        val photoIndex = getColumnIndex(ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI)
+
+        return Contact(
+            id = getString(idIndex) ?: "",
+            name = getString(nameIndex) ?: "",
+            phoneNumber = getString(numberIndex)?.normalizePhoneNumber() ?: "",
+            photoThumbnailUri = getString(photoIndex)
+        )
     }
 
-    private fun String.normalizePhoneNumber(): String {
-        return replace(Regex("[^0-9+]"), "")
-    }
-
-    private fun isPreferredPhoneType(type: Int): Boolean {
-        return when (type) {
-            ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE,
-            ContactsContract.CommonDataKinds.Phone.TYPE_MAIN,
-            ContactsContract.CommonDataKinds.Phone.TYPE_WORK_MOBILE -> true
-            else -> false
-        }
-    }
+    private fun String.normalizePhoneNumber(): String =
+        replace(Regex("[^0-9+]"), "")
 }

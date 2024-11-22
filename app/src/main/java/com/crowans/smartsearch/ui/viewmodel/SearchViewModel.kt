@@ -7,14 +7,13 @@ import com.crowans.smartsearch.data.repository.AppsRepository
 import com.crowans.smartsearch.data.repository.ContactsRepository
 import com.crowans.smartsearch.ui.state.SearchState
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -22,35 +21,41 @@ import kotlinx.coroutines.launch
 class SearchViewModel(application: Application) : AndroidViewModel(application) {
     private val contactsRepository = ContactsRepository(application)
     private val appsRepository = AppsRepository(application)
+
     private val _searchState = MutableStateFlow(SearchState())
     val searchState: StateFlow<SearchState> = _searchState.asStateFlow()
 
-    // Add a query flow to handle debouncing
     private val queryFlow = MutableStateFlow("")
+    private var searchJob: Job? = null
 
     init {
-        // Set up query processing
-        queryFlow
-            .debounce(300) // Add small delay to avoid too frequent searches
-            .distinctUntilChanged()
-            .filter { it.isNotEmpty() }
-            .onEach { query -> search(query) }
-            .launchIn(viewModelScope)
+        viewModelScope.launch {
+            queryFlow
+                .debounce(200) // Reduced debounce time
+                .distinctUntilChanged()
+                .filter { it.length >= 2 }
+                .collect { query -> search(query) }
+        }
     }
 
     fun onSearchQueryChanged(query: String) {
         _searchState.update { it.copy(query = query) }
-        if (query.isEmpty()) {
-            _searchState.update { it.copy(contacts = emptyList(), apps = emptyList()) }
+        if (query.length < 2) {
+            _searchState.update {
+                it.copy(contacts = emptyList(), apps = emptyList(), isLoading = false)
+            }
+            searchJob?.cancel()
         } else {
             queryFlow.value = query
         }
     }
 
     private fun search(query: String) {
-        viewModelScope.launch {
-            _searchState.update { it.copy(isLoading = true, error = null) }
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
             try {
+                _searchState.update { it.copy(isLoading = true, error = null) }
+
                 // Launch parallel searches
                 launch {
                     contactsRepository.searchContacts(query)
@@ -74,10 +79,5 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        // Clean up any resources if needed
     }
 }
